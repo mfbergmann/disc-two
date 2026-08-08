@@ -30,7 +30,7 @@ services:
       # Mounted the same way your *arr mounts it — see README.
       - ${MEDIA_DIR}:/data
     ports:
-      - "${WEB_PORT:-8080}:8080"
+      - "${WEB_PORT:-8472}:8472"
     restart: unless-stopped
     # Optional: only needed for GPU encoding.
     # runtime: nvidia

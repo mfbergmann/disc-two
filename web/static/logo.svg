@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Disc Two">
+  <title>Disc Two</title>
+  <!-- Two discs, the second one lit and numbered: the extras disc of a special
+       edition. Flat marks rather than the chrome and bevels of the menus that
+       inspired it — the reference is the era, not a pastiche of it.
+       The front disc is filled with the page colour so it occludes the one
+       behind cleanly, and carries the numeral instead of a centre hole, which
+       would otherwise sit exactly where the 2 does. -->
+  <circle cx="23" cy="32" r="16" fill="none" stroke="#4a5468" stroke-width="3"/>
+  <circle cx="23" cy="32" r="4.5" fill="none" stroke="#4a5468" stroke-width="3"/>
+  <circle cx="41" cy="32" r="16" fill="#0b0e14" stroke="#d4a24c" stroke-width="3"/>
+  <path d="M35.5 28.5C35.5 25 38 23 41 23c3 0 5.5 2 5.5 5 0 2.5-1.5 4-4 6L35.5 40H47"
+        fill="none" stroke="#d4a24c" stroke-width="3"
+        stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

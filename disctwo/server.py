@@ -17,7 +17,7 @@ from urllib.parse import parse_qs, unquote, urlparse
 from . import library
 from .library import ISO_DIR
 
-PORT = int(os.environ.get("WEB_PORT", "8080"))
+PORT = int(os.environ.get("WEB_PORT", "8472"))
 HERE = os.path.dirname(os.path.abspath(__file__))
 WEB = os.path.join(os.path.dirname(HERE), "web")
 MAX_JSON = 256 * 1024
@@ -114,6 +114,15 @@ class Handler(BaseHTTPRequestHandler):
             except OSError:
                 self._send(500, "index.html missing", "text/plain")
             return
+
+        if path.startswith("/static/"):
+            name = os.path.basename(path)
+            fp = os.path.join(WEB, "static", name)
+            if not re.fullmatch(r"[A-Za-z0-9._-]+", name) or not os.path.isfile(fp):
+                return self._send(404, "not found", "text/plain")
+            ctype = "image/svg+xml" if name.endswith(".svg") else "application/octet-stream"
+            with open(fp, "rb") as fh:
+                return self._send(200, fh.read(), ctype)
 
         if path == "/api/status":
             self._send(200, {

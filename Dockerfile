@@ -45,8 +45,8 @@ ENV PYTHONPATH=/app \
     PYTHONUNBUFFERED=1 \
     ISO_DIR=/isos \
     STATE_DIR=/config \
-    WEB_PORT=8080
+    WEB_PORT=8472
 
 WORKDIR /app
-EXPOSE 8080
+EXPOSE 8472
 CMD ["python3", "-m", "disctwo.server"]
