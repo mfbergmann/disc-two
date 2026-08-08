@@ -1,0 +1,365 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Disc Two</title>
+<style>
+  /* A library tool, not a toy: paper-and-ink neutrals, one accent used only
+     where something needs doing, and numbers in a tabular face so runtimes
+     line up down a column. */
+  :root {
+    --bg:#f7f6f3; --panel:#fff; --edge:#e2ded6; --ink:#1c1a17; --dim:#6f675d;
+    --accent:#8a5a2b; --ok:#3f7d54; --warn:#b8791f; --bad:#a63d40;
+    --shadow:0 1px 2px rgba(28,26,23,.06), 0 4px 12px rgba(28,26,23,.04);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#16151a; --panel:#1e1d23; --edge:#312f38; --ink:#eae7e1;
+            --dim:#948c84; --accent:#d59a5c; --ok:#7fb069; --warn:#d9a441;
+            --bad:#d1656a; --shadow:none; }
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink);
+         font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,system-ui,sans-serif; }
+  .wrap { max-width:940px; margin:0 auto; padding:2rem 1.25rem 5rem; }
+  header { display:flex; align-items:baseline; gap:.75rem; flex-wrap:wrap;
+           margin-bottom:.35rem; }
+  h1 { font-size:1.45rem; margin:0; letter-spacing:-.02em; font-weight:650; }
+  .tag { color:var(--dim); font-size:.85rem; }
+  .rail { display:flex; gap:1.25rem; flex-wrap:wrap; color:var(--dim);
+          font-size:.8rem; margin:.5rem 0 2rem; }
+  .rail b { color:var(--ink); font-weight:600; }
+  .dot { display:inline-block; width:7px; height:7px; border-radius:50%;
+         background:var(--dim); margin-right:.4rem; vertical-align:middle; }
+  .dot.on { background:var(--ok); } .dot.off { background:var(--edge); }
+  h2 { font-size:.72rem; text-transform:uppercase; letter-spacing:.11em;
+       color:var(--dim); font-weight:700; margin:2.25rem 0 .7rem; }
+  .card { background:var(--panel); border:1px solid var(--edge); border-radius:10px;
+          padding:.85rem 1rem; margin-bottom:.5rem; box-shadow:var(--shadow); }
+  .disc { display:flex; align-items:center; gap:.75rem; flex-wrap:wrap; }
+  .disc .nm { flex:1 1 14rem; min-width:0; font-weight:560; word-break:break-word; }
+  .disc .sub { color:var(--dim); font-size:.8rem; font-weight:400; display:block; }
+  .num { font-variant-numeric:tabular-nums; color:var(--dim); font-size:.82rem; }
+  .empty { color:var(--dim); font-style:italic; }
+  button { background:var(--accent); color:#fff; border:0; border-radius:7px;
+           padding:.45rem .9rem; font:inherit; font-size:.85rem; font-weight:600;
+           cursor:pointer; white-space:nowrap; }
+  button:hover { filter:brightness(1.08); }
+  button.ghost { background:transparent; color:var(--dim); border:1px solid var(--edge);
+                 font-weight:500; }
+  button.ghost:hover { color:var(--ink); border-color:var(--dim); filter:none; }
+  .pill { display:inline-block; padding:.1rem .5rem; border-radius:999px;
+          font-size:.7rem; font-weight:700; letter-spacing:.02em; }
+  .pill.todo { background:var(--warn); color:#fff; }
+  .pill.done { background:var(--ok); color:#fff; }
+  .pill.bad  { background:var(--bad); color:#fff; }
+  .pill.busy { background:var(--edge); color:var(--dim); }
+  .modal { position:fixed; inset:0; background:rgba(20,18,16,.55); display:none;
+           align-items:flex-start; justify-content:center; padding:2rem 1rem;
+           overflow-y:auto; z-index:20; backdrop-filter:blur(2px); }
+  .modal.on { display:flex; }
+  .sheet { background:var(--panel); border:1px solid var(--edge); border-radius:14px;
+           padding:1.4rem; width:100%; max-width:46rem; box-shadow:var(--shadow); }
+  .sheet h3 { margin:0 0 .3rem; font-size:1.1rem; letter-spacing:-.01em; }
+  .hint { color:var(--dim); font-size:.83rem; margin-bottom:1rem; }
+  .pick { display:flex; gap:.7rem; align-items:center; padding:.55rem .6rem;
+          border:1px solid var(--edge); border-radius:9px; margin-bottom:.4rem;
+          cursor:pointer; }
+  .pick:hover { border-color:var(--accent); }
+  .pick.sel { border-color:var(--accent); box-shadow:inset 0 0 0 1px var(--accent); }
+  .pick img { width:36px; height:54px; object-fit:cover; border-radius:4px;
+              background:var(--edge); flex:0 0 auto; }
+  .pick b { display:block; font-size:.9rem; } .pick small { color:var(--dim); font-size:.76rem; }
+  .row { display:flex; gap:.5rem; align-items:center; padding:.4rem 0;
+         border-bottom:1px solid var(--edge); }
+  .row:last-of-type { border-bottom:0; }
+  input[type=text], select, input[type=search] {
+    background:var(--bg); border:1px solid var(--edge); color:var(--ink);
+    border-radius:7px; padding:.4rem .55rem; font:inherit; font-size:.85rem; min-width:0; }
+  input[type=text] { flex:1; }
+  select { flex:0 0 auto; max-width:10rem; font-size:.78rem; }
+  .dur { color:var(--dim); font-size:.78rem; font-variant-numeric:tabular-nums;
+         min-width:4.6rem; }
+  .src { font-size:.65rem; font-weight:700; padding:.05rem .35rem; border-radius:4px;
+         background:var(--edge); color:var(--dim); }
+  .src.db { background:var(--ok); color:#fff; }
+  .src.ai { background:var(--accent); color:#fff; }
+  .btns { display:flex; gap:.5rem; margin-top:1.2rem; flex-wrap:wrap; }
+  .log { background:var(--bg); border:1px solid var(--edge); border-radius:9px;
+         padding:.65rem .8rem; font-family:ui-monospace,Menlo,Consolas,monospace;
+         font-size:.75rem; max-height:15rem; overflow:auto; white-space:pre-wrap;
+         margin-top:.8rem; }
+  .toast { position:fixed; left:50%; bottom:1.5rem; transform:translateX(-50%);
+           background:var(--ink); color:var(--bg); padding:.6rem 1.1rem;
+           border-radius:8px; font-size:.85rem; font-weight:600; opacity:0;
+           pointer-events:none; transition:opacity .25s; z-index:30; }
+  .toast.on { opacity:1; }
+  footer { color:var(--dim); font-size:.78rem; margin-top:3rem; text-align:center; }
+  footer a { color:var(--accent); text-decoration:none; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header><h1>Disc Two</h1><span class="tag">special features, filed properly</span></header>
+  <div class="rail" id="rail"></div>
+
+  <h2>Discs</h2>
+  <div id="discs"><div class="card empty">looking for ISOs…</div></div>
+
+  <h2>Catalogue</h2>
+  <div id="catalogue"></div>
+
+  <footer>Disc Two reads ISOs — it never modifies, moves or deletes one.<br>
+    <a href="https://github.com/mfbergmann/disc-two" target="_blank" rel="noopener">github.com/mfbergmann/disc-two</a>
+  </footer>
+</div>
+<div class="modal" id="modal"><div class="sheet" id="sheet"></div></div>
+<div class="toast" id="toast"></div>
+
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g,
+  c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const gb = b => b >= 1e9 ? (b/1e9).toFixed(2)+' GB' : (b/1e6).toFixed(0)+' MB';
+const PLEX_DIRS = ['Featurettes','Behind The Scenes','Deleted Scenes','Interviews',
+                   'Scenes','Shorts','Trailers','Other'];
+let RV = null, STATE = {};
+
+function toast(m){ const t=$('#toast'); t.textContent=m; t.classList.add('on');
+  clearTimeout(t._x); t._x=setTimeout(()=>t.classList.remove('on'),2600); }
+async function post(url, body){
+  try { const r = await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify(body)}); const d = await r.json();
+    if (d.error) { toast(d.error); return null; } return d; }
+  catch { toast('request failed'); return null; }
+}
+const openSheet = h => { $('#sheet').innerHTML = h; $('#modal').classList.add('on'); };
+const closeSheet = () => $('#modal').classList.remove('on');
+
+const PILL = {new:['todo','needs review'], inspected:['todo','needs review'],
+  scanning:['busy','reading…'], importing:['busy','importing…'],
+  imported:['done','in library'], failed:['bad','failed'], skipped:['',''] };
+
+function draw(){
+  const v = STATE.vision||{}, r = STATE.radarr||{}, c = STATE.discdb||{};
+  $('#rail').innerHTML = [
+    `<span><span class="dot ${r.reachable?'on':'off'}"></span>Radarr ${r.reachable?`<b>${r.movies}</b> films`:'not connected'}</span>`,
+    `<span><span class="dot ${c.synced?'on':'off'}"></span>Catalogue ${c.synced?`<b>${c.discs}</b> discs`:'not downloaded'}</span>`,
+    `<span><span class="dot ${v.available?'on':'off'}"></span>Vision ${v.available?`<b>${esc(v.model||'')}</b>${v.loaded?' · warm':''}`:'tesseract only'}</span>`,
+  ].join('');
+
+  const isos = STATE.isos||[];
+  $('#discs').innerHTML = isos.length ? isos.map(i => {
+    const [cls,label] = PILL[i.review] || ['',''];
+    return `<div class="card disc">
+      <span class="nm">${esc(i.name)}
+        ${label?`<span class="pill ${cls}">${label}</span>`:''}
+        <span class="sub">${i.movie?esc(i.movie)+' ('+esc(i.year)+')':'&nbsp;'}</span></span>
+      <span class="num">${gb(i.size)}</span>
+      <button onclick="review('${esc(i.rel)}')">${i.review==='imported'?'Re-import':'Identify &amp; import'}</button>
+    </div>`; }).join('')
+    : `<div class="card empty">No ISOs found in ${esc(STATE.iso_dir||'')}. Mount some and they appear here.</div>`;
+
+  $('#catalogue').innerHTML = `<div class="card disc">
+    <span class="nm">TheDiscDb${c.synced?` — <b>${c.discs}</b> DVDs indexed`:' — not downloaded'}
+      <span class="sub">exact disc identification and real extra names</span></span>
+    <button class="ghost" onclick="syncDb()">${c.synced?'Refresh':'Download'}</button></div>`;
+}
+
+async function refresh(){
+  try { STATE = await (await fetch('/api/status')).json(); draw(); } catch {}
+}
+
+async function review(rel){
+  RV = {rel};
+  openSheet(`<h3>Reading the disc…</h3><div class="hint">Listing titles and identifying it.</div>`);
+  let d; try { d = await (await fetch('/api/inspect?rel='+encodeURIComponent(rel))).json(); }
+  catch { d = null; }
+  if (!d || d.error) return openSheet(
+    `<h3>Could not read that disc</h3><div class="hint">${esc(d?.error||'no answer')}</div>
+     <div class="btns"><button class="ghost" onclick="closeSheet()">Close</button></div>`);
+  RV.data = d; RV.chosen = d.suggestion || null; drawReview();
+}
+
+let SHOWN = [];
+const chooseMovie = i => { RV.chosen = SHOWN[i]; drawReview(); };
+const namedCount = d => (d.extras||[]).filter(t => t.source && t.source!=='placeholder').length;
+
+function drawReview(){
+  const d = RV.data, c = RV.chosen, db = d.discdb || {};
+  SHOWN = d.suggestion ? [d.suggestion, ...d.candidates.filter(x=>x.tmdbId!==d.suggestion.tmdbId)]
+                       : d.candidates.slice();
+  if (c && !SHOWN.some(m=>m.tmdbId===c.tmdbId)) SHOWN.unshift(c);
+  const isNew = c && !c.in_library;
+
+  openSheet(`
+    <h3>${d.suggestion?'Is this the right film?':'Which film is this?'}</h3>
+    <div class="hint"><b>${esc(d.iso.split('/').pop())}</b> — feature ${esc(d.feature.duration)},
+      ${d.extras.length} extra${d.extras.length===1?'':'s'}.
+      ${db.matched?`Identified from the catalogue (${db.how==='contenthash'?'exact disc match':'runtime guess'}).`
+                  :'Not in the catalogue — names below are placeholders.'}</div>
+
+    ${SHOWN.map((m,i)=>`<div class="pick${c&&c.tmdbId===m.tmdbId?' sel':''}" onclick="chooseMovie(${i})">
+      ${m.poster?`<img src="${esc(m.poster)}" alt="" loading="lazy">`:'<img alt="">'}
+      <div><b>${esc(m.title)} (${esc(m.year)})</b>
+      <small>${m.in_library?'in your library':'not in library — will be added to Radarr'}</small></div>
+    </div>`).join('') || '<div class="hint">No candidates — search below.</div>'}
+
+    <div class="row" style="border:0">
+      <input type="search" id="q" placeholder="search by title, e.g. Alien 3 1992"
+             value="${esc(RV.search ?? d.guess ?? '')}"
+             onkeydown="if(event.key==='Enter')doSearch()">
+      <button class="ghost" onclick="doSearch()">Search</button>
+    </div>
+
+    ${c ? `
+      <div class="hint" style="margin:1.1rem 0 .3rem">
+        ${isNew ? `<b>${esc(c.title)}</b> isn't in the library. It'll be added to Radarr so
+                   Radarr names the folder, then the main title is imported with the extras.`
+                : `Extras go to <b>${esc(c.path)}/</b>. Your existing film file is untouched.`}
+      </div>
+      <label class="row" style="border:0">
+        <input type="checkbox" id="feat" ${isNew?'checked':''}>
+        <span style="flex:1;font-size:.85rem">Also import the main feature (${esc(d.feature.duration)})</span>
+      </label>
+      <div class="hint" style="margin:.9rem 0 .2rem">
+        ${namedCount(d)?`<b>${namedCount(d)}</b> of ${d.extras.length} named automatically — check them.`
+                       :'Name these from the disc menu or the case, then import.'}</div>
+      ${d.extras.map((t,i)=>`<label class="row">
+        <input type="checkbox" ${t.include?'checked':''} id="inc${i}">
+        <span class="dur">${esc(t.duration)}</span>
+        <input type="text" id="nm${i}" value="${esc(t.name)}">
+        <select id="dir${i}">${PLEX_DIRS.map(x=>`<option${x===(t.subdir||'Featurettes')?' selected':''}>${x}</option>`).join('')}</select>
+        ${t.source==='thediscdb'?'<span class="src db">db</span>'
+          :t.source==='vision'||t.source==='menu'?'<span class="src ai">menu</span>'
+          :t.source==='cover'?'<span class="src ai">box</span>':''}
+      </label>`).join('') || '<div class="hint">No extras detected.</div>'}
+      ${d.skipped.length?`<div class="hint" style="margin-top:.7rem"><b>Skipped:</b> ${
+        d.skipped.map(s=>`title ${s.ix} (${esc(s.duration)}) — ${esc(s.reason)}`).join('; ')}</div>`:''}
+    ` : ''}
+
+    <div class="btns">
+      ${c?`<button onclick="doImport()">${isNew?'Add to Radarr &amp; import':'Import extras'}</button>`:''}
+      ${!db.matched?`<label class="ghost" style="display:inline-flex;align-items:center;
+         border:1px solid var(--edge);border-radius:7px;padding:.45rem .9rem;
+         font-size:.85rem;color:var(--dim);cursor:pointer">Read the case back
+         <input type="file" accept="image/*" capture="environment" style="display:none"
+                onchange="coverPhoto(this)"></label>
+       <button class="ghost" onclick="menuScan()">Read the disc menu</button>`:''}
+      ${c&&!db.matched?`<button class="ghost" onclick="contribute()">Contribute to TheDiscDb</button>`:''}
+      <button class="ghost" onclick="closeSheet()">Cancel</button>
+    </div>`);
+}
+
+function readEdits(){
+  (RV.data.extras||[]).forEach((t,i)=>{
+    const n=document.getElementById('nm'+i), c=document.getElementById('inc'+i),
+          d=document.getElementById('dir'+i);
+    if(n) t.name=n.value; if(c) t.include=c.checked; if(d) t.subdir=d.value;
+  });
+}
+
+async function doSearch(){
+  const q=(document.getElementById('q')||{}).value||'';
+  if(q.trim().length<2) return toast('type at least two characters');
+  RV.search=q; readEdits(); toast('searching…');
+  let r; try{ r=await (await fetch('/api/search?q='+encodeURIComponent(q))).json(); }catch{ return toast('search failed'); }
+  if(r.error) return toast(r.error);
+  const seen=new Set();
+  RV.data.candidates=[...(r.library||[]),...(r.tmdb||[])].filter(m=>!seen.has(m.tmdbId)&&seen.add(m.tmdbId));
+  RV.data.suggestion=null; drawReview();
+}
+
+async function doImport(){
+  readEdits();
+  const d=RV.data, feat=document.getElementById('feat');
+  const r = await post('/api/import',{rel:RV.rel, tmdbId:RV.chosen.tmdbId,
+    includeFeature:!!(feat&&feat.checked), featureIx:d.feature.ix,
+    featureSeconds:d.feature.seconds,
+    extras:d.extras.map(t=>({ix:t.ix,name:t.name,seconds:t.seconds,
+      chapters:t.chapters,subdir:t.subdir,include:t.include}))});
+  if(!r) return;
+  if(r.created_movie) toast('added to Radarr');
+  RV.job=r.job; pollJob();
+}
+
+async function pollJob(){
+  let j; try{ j=await (await fetch('/api/job?id='+encodeURIComponent(RV.job))).json(); }catch{ j=null; }
+  if(!j) return setTimeout(pollJob,2500);
+  const done = j.status==='done'||j.status==='failed';
+  openSheet(`<h3>${done?(j.status==='done'?'Imported':'Finished with errors'):'Importing…'}</h3>
+    <div class="hint">${esc((j.movie&&j.movie.title)||'')}${j.encoder?' · '+esc(j.encoder):''}
+      ${j.total?` · ${j.done||0}/${j.total}`:''}${j.current?'<br>encoding '+esc(j.current):''}</div>
+    <div class="log">${(j.log||[]).map(esc).join('\n')||'starting…'}</div>
+    <div class="btns"><button class="ghost" onclick="closeSheet()">${done?'Close':'Run in background'}</button></div>`);
+  if(!done) setTimeout(pollJob,2500); else refresh();
+}
+
+async function coverPhoto(input){
+  const f=input.files&&input.files[0]; if(!f) return;
+  readEdits(); toast('reading the case…');
+  let r; try{ r=await fetch('/api/cover?rel='+encodeURIComponent(RV.rel),
+    {method:'POST',body:f}).then(x=>x.json()); }catch{ return toast('upload failed'); }
+  input.value='';
+  if(!(r.names||[]).length) return toast(r.error||'nothing found on it');
+  RV.names=r.names; showNames('the case back',
+    'The case says how they are spelled. It cannot say which title each one is — check the pairing.');
+}
+
+async function menuScan(){
+  readEdits();
+  const r=await post('/api/menu-scan',{rel:RV.rel}); if(!r) return;
+  RV.job=r.job; pollMenu();
+}
+async function pollMenu(){
+  let j; try{ j=await (await fetch('/api/job?id='+encodeURIComponent(RV.job))).json(); }catch{ j=null; }
+  if(!j) return setTimeout(pollMenu,3000);
+  const done=j.status==='done'||j.status==='failed';
+  openSheet(`<h3>${done?(j.status==='done'?'Read from the menu':'Could not read the menu'):'Reading the disc menu…'}</h3>
+    <div class="hint">Rendering each menu and reading its labels.${j.error?' '+esc(j.error):''}</div>
+    <div class="log">${(j.log||[]).map(esc).join('\n')||'starting…'}</div>
+    <div class="btns">${done&&(j.names||[]).length?
+      `<button onclick="RV.names=(${JSON.stringify(j.names||[]).replace(/"/g,'&quot;')}).map(n=>n.label||n);applyNames()">Use these names</button>`:''}
+      <button class="ghost" onclick="drawReview()">Back</button></div>`);
+  if(!done) setTimeout(pollMenu,3000);
+}
+
+function showNames(where, caveat){
+  openSheet(`<h3>Read from ${esc(where)}</h3>
+    <div class="hint">${esc(caveat)}</div>
+    <div class="log">${RV.names.map((n,i)=>esc((i+1)+'. '+n)).join('\n')}</div>
+    <div class="btns"><button onclick="applyNames()">Use these names, in order</button>
+      <button class="ghost" onclick="drawReview()">Back</button></div>`);
+}
+
+function applyNames(){
+  const names=RV.names||[];
+  RV.data.extras.forEach((t,i)=>{ if(i<names.length){ t.name=names[i]; t.source='cover'; }});
+  toast(`applied ${Math.min(names.length,RV.data.extras.length)} names — check the pairing`);
+  drawReview();
+}
+
+async function contribute(){
+  readEdits(); const d=RV.data,c=RV.chosen;
+  const r=await post('/api/contribute',{rel:RV.rel,
+    movie:{title:c.title,year:c.year,tmdbId:c.tmdbId},
+    featureIx:d.feature.ix, featureSeconds:d.feature.seconds, featureChapters:d.feature.chapters,
+    extras:d.extras.map(t=>({ix:t.ix,seconds:t.seconds,chapters:t.chapters,
+      name:t.name,subdir:t.subdir,include:t.include}))});
+  if(!r) return;
+  openSheet(`<h3>Submission written</h3>
+    <div class="hint">${r.named} of ${r.titles} titles named, keyed on <code>${esc(r.content_hash)}</code>.</div>
+    <div class="log">${esc(r.release_dir)}</div>
+    <div class="hint" style="margin-top:.8rem">Fork <b>github.com/TheDiscDb/data</b>, copy that
+      <code>data/</code> tree in, open a pull request. Check the names against the packaging first —
+      a wrong name in a shared catalogue is worse than a gap.</div>
+    <div class="btns"><button class="ghost" onclick="closeSheet()">Close</button></div>`);
+}
+
+async function syncDb(){ const r=await post('/api/discdb-sync',{}); if(!r) return;
+  RV={job:r.job}; toast('fetching the catalogue…'); pollJob(); }
+
+refresh(); setInterval(refresh, 4000);
+</script>
+</body>
+</html>

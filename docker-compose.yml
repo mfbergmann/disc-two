@@ -1,0 +1,37 @@
+services:
+  disc-two:
+    build: .
+    image: ghcr.io/mfbergmann/disc-two:latest
+    container_name: disc-two
+    environment:
+      - TZ=${TZ:-UTC}
+      - ISO_DIR=/isos
+      - STATE_DIR=/config
+      - RADARR_URL=${RADARR_URL:-}
+      - RADARR_API_KEY=${RADARR_API_KEY:-}
+      - RADARR_QUALITY_PROFILE=${RADARR_QUALITY_PROFILE:-}
+      - PLEX_URL=${PLEX_URL:-}
+      - PLEX_TOKEN=${PLEX_TOKEN:-}
+      - OLLAMA_URL=${OLLAMA_URL:-}
+      - OLLAMA_VISION_MODEL=${OLLAMA_VISION_MODEL:-}
+      - VISION_PRELOAD=${VISION_PRELOAD:-1}
+      - EXTRAS_ENCODER=${EXTRAS_ENCODER:-}
+      - EXTRAS_QUALITY=${EXTRAS_QUALITY:-22}
+      - EXTRAS_FILTERS=${EXTRAS_FILTERS:---detelecine --deinterlace}
+      - EXTRAS_SUBDIR=${EXTRAS_SUBDIR:-Featurettes}
+      - EXTRAS_UID=${EXTRAS_UID:-1000}
+      - EXTRAS_GID=${EXTRAS_GID:-1000}
+    volumes:
+      # Read-only: it reads discs, it does not manage them.
+      - ${ISO_DIR}:/isos:ro
+      - ${STATE_DIR}:/config
+      # Mounted the same way your *arr mounts it — see README.
+      - ${MEDIA_DIR}:/data
+    ports:
+      - "${WEB_PORT:-8080}:8080"
+    restart: unless-stopped
+    # Optional: only needed for GPU encoding.
+    # runtime: nvidia
+    # environment extras:
+    #   - NVIDIA_VISIBLE_DEVICES=all
+    #   - NVIDIA_DRIVER_CAPABILITIES=compute,video,utility
