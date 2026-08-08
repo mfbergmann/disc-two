@@ -122,6 +122,7 @@ class Handler(BaseHTTPRequestHandler):
                 "discdb": library.discdb_status(),
                 "vision": library.vision_status(),
                 "radarr": library.radarr_status(),
+                "sonarr": __import__("disctwo.tv", fromlist=["tv"]).status(),
             })
             return
 
@@ -142,8 +143,10 @@ class Handler(BaseHTTPRequestHandler):
             term = (query.get("q") or [""])[0].strip()
             if len(term) < 2:
                 return self._send(400, {"error": "search for at least two characters"})
+            from .tv import search_series, configured as sonarr_on
             return self._send(200, {"library": library.search_library(term),
-                                    "tmdb": library.search_tmdb(term)})
+                                    "tmdb": library.search_tmdb(term),
+                                    "series": search_series(term) if sonarr_on() else []})
 
         if path == "/api/job":
             return self._send(200, library.job((query.get("id") or [""])[0]))
@@ -203,6 +206,21 @@ class Handler(BaseHTTPRequestHandler):
                                     "movie": {"title": movie.get("title"),
                                               "year": movie.get("year"),
                                               "path": movie.get("path")}})
+
+        if path == "/api/import-episodes":
+            target = self._iso(payload.get("rel"))
+            if not target:
+                return self._send(404, {"error": "no such ISO"})
+            try:
+                job_id, series = library.start_episode_import(
+                    target, int(payload.get("seriesId") or 0),
+                    int(payload.get("season") or 0),
+                    payload.get("episodes") or [])
+            except (ValueError, TypeError) as e:
+                return self._send(400, {"error": str(e) or "could not start"})
+            return self._send(200, {"ok": True, "job": job_id,
+                                    "series": {"title": series.get("title"),
+                                               "path": series.get("path")}})
 
         if path == "/api/menu-scan":
             target = self._iso(payload.get("rel"))

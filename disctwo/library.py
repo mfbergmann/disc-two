@@ -33,6 +33,7 @@ import urllib.parse
 import urllib.request
 
 from . import disc as ei
+from . import tv
 
 try:
     from . import discdb
@@ -171,6 +172,136 @@ def lookup_discdb(iso_path, titles):
         return {"matched": False, "reason": "lookup failed: %s" % e}
 
 
+def _inspect_episodes(iso_path, titles, episode_titles, guess, disc, reason,
+                      catalogue_eps):
+    """What an episode disc looks like to the review screen."""
+    cat = {}
+    for ix, info in (catalogue_eps or {}).items():
+        cat[ix] = {"season": info.get("season"), "number": info.get("episode"),
+                   "name": info.get("name")}
+    first = min((c.get("number") or 99) for c in cat.values()) if cat else 1
+    rows = tv.map_episodes(episode_titles, first_episode=first, catalogue=cat)
+
+    series, candidates = None, []
+    if tv.configured() and guess:
+        try:
+            candidates = tv.search_series(guess)
+            if candidates and candidates[0].get("score", 0) >= ei.MATCH_THRESHOLD:
+                series = candidates[0]
+        except tv.SonarrError:
+            candidates = []
+
+    season = next((r["season"] for r in rows if r.get("season")), None)
+    return {
+        "kind": "episodes",
+        "iso": iso_path,
+        "guess": guess,
+        "reason": reason,
+        "discdb": disc,
+        "series": series,
+        "candidates": candidates,
+        "season": season,
+        "episodes": [{
+            "ix": r["ix"],
+            "duration": ei.human_duration(r["seconds"]),
+            "seconds": r["seconds"],
+            "chapters": r["chapters"],
+            "number": r["number"],
+            "title": r["title"],
+            "source": r["source"],
+            "include": True,
+        } for r in rows],
+        "playall": [{"ix": t["ix"], "duration": ei.human_duration(t["seconds"])}
+                    for t in tv.playall_titles(titles, episode_titles)],
+        "skipped": [],
+    }
+
+
+def start_episode_import(iso_path, series_id, season, episodes, first_episode=1):
+    """Encode a disc's episodes into the season folder Sonarr manages."""
+    series = next((s for s in tv.all_series() if s.get("id") == int(series_id)), None)
+    if not series:
+        raise ValueError("Sonarr does not have series %s" % series_id)
+    if review_status(iso_path) in ("importing", "scanning"):
+        raise ValueError("this disc is already busy — let it finish")
+
+    target_dir = tv.season_dir(series["path"], season)
+    known = {e["number"]: e for e in tv.episodes(series_id, season)}
+
+    work = []
+    for row in episodes:
+        if not row.get("include"):
+            continue
+        number = int(row.get("number") or 0)
+        if not number:
+            continue
+        # Sonarr's own episode title beats anything read off a disc: it is the
+        # name the library already uses, so the file matches its siblings.
+        title = (known.get(number) or {}).get("title") or row.get("title") or ""
+        work.append({
+            "ix": int(row["ix"]),
+            "seconds": float(row.get("seconds") or 0),
+            "dest": os.path.join(target_dir, tv.episode_filename(
+                series["title"], season, number, title)),
+            "label": "S%02dE%02d %s" % (int(season), number, title),
+        })
+    if not work:
+        raise ValueError("no episodes selected")
+
+    job_id = "tv-%d" % (time.time() * 1000)
+    _set(job_id, status="queued", iso=iso_path, done=0, total=len(work), log=[])
+    save_review(iso_path, {"status": "importing", "job": job_id,
+                           "series": {"title": series["title"], "id": series["id"],
+                                      "path": series["path"]},
+                           "season": int(season), "started": time.time()})
+
+    def run():
+        try:
+            os.makedirs(target_dir, exist_ok=True)
+            try:
+                os.chown(target_dir, ei.OWNER_UID, ei.OWNER_GID)
+                os.chmod(target_dir, 0o775)
+            except (PermissionError, OSError):
+                pass
+            encoder = ei.pick_encoder()
+            _set(job_id, status="running", encoder=encoder)
+            ok = failed = 0
+            for n, item in enumerate(work, 1):
+                _set(job_id, current=item["label"], done=n - 1)
+                if os.path.exists(item["dest"]):
+                    _append_log(job_id, "skipped (exists): %s" % item["label"])
+                    continue
+                good, note = ei.encode_title(iso_path, item["ix"], item["dest"],
+                                             encoder, expect_seconds=item["seconds"])
+                if good:
+                    ok += 1
+                    _append_log(job_id, "imported: %s%s"
+                                % (item["label"], "  (%s)" % note if note else ""))
+                else:
+                    failed += 1
+                    _append_log(job_id, "FAILED: %s — %s"
+                                % (item["label"], (note or "")[:200]))
+            _set(job_id, done=len(work), current="")
+            if ok:
+                tv.rescan(series_id)
+                _append_log(job_id, "asked Sonarr to rescan")
+                notify_plex(series["path"])
+            _set(job_id, status="failed" if failed and not ok else "done",
+                 ok=ok, failed=failed, finished=time.time())
+            review = load_review(iso_path)
+            review.update({"status": "imported" if ok else "failed",
+                           "imported": ok, "failed": failed})
+            save_review(iso_path, review)
+        except Exception as e:                           # noqa: BLE001
+            _set(job_id, status="failed", error=str(e), finished=time.time())
+            review = load_review(iso_path)
+            review.update({"status": "failed", "error": str(e)})
+            save_review(iso_path, review)
+
+    threading.Thread(target=run, daemon=True).start()
+    return job_id, series
+
+
 def inspect_iso(iso_path):
     """Read the disc's titles and propose a film, without writing anything."""
     titles = ei.lsdvd_titles(iso_path)
@@ -180,6 +311,21 @@ def inspect_iso(iso_path):
     feature, extras, skipped = ei.classify(titles)
     guess = ei.guess_name_from_iso(iso_path)
     disc = lookup_discdb(iso_path, titles)
+
+    # A box set is not a film with unusually long extras. Deciding that first
+    # changes what every later question means: there is no "main feature" on an
+    # episode disc, and its longest title is usually a play-all chain.
+    catalogue_eps = {ix: info for ix, info in ((disc or {}).get("names") or {}).items()
+                     if info.get("type") == "Episode"}
+    if catalogue_eps:
+        is_tv, episode_titles = True, [t for t in titles if t["ix"] in catalogue_eps]
+        tv_reason = "the catalogue lists these titles as episodes"
+    else:
+        is_tv, episode_titles, tv_reason = tv.looks_like_episodes(titles)
+
+    if is_tv:
+        return _inspect_episodes(iso_path, titles, episode_titles, guess, disc,
+                                 tv_reason, catalogue_eps)
 
     suggestion, candidates = None, []
 
@@ -251,6 +397,7 @@ def inspect_iso(iso_path):
         extra_rows.append(row)
 
     return {
+        "kind": "movie",
         "iso": iso_path,
         "guess": guess,
         "suggestion": suggestion,

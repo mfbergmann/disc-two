@@ -295,6 +295,18 @@ def parse_query(query):
     return normalize(query or ""), year
 
 
+# Words too common in titles to be evidence on their own. Sharing one of these
+# is not sharing a word: "ZZQQ Not A Show" matched "Baroness von Sketch Show"
+# purely on "show", and a library with three Shows in it would do that often.
+GENERIC_TITLE_WORDS = {
+    "show", "shows", "series", "story", "stories", "tale", "tales", "part",
+    "volume", "season", "complete", "collection", "edition", "special",
+    "movie", "film", "live", "new", "man", "men", "woman", "women", "day",
+    "days", "night", "nights", "life", "love", "world", "time", "times",
+    "last", "first", "great", "little", "big", "one", "two", "three",
+}
+
+
 def rank_movies(want, movies, year=None):
     """Score every movie against a normalized query.
 
@@ -302,7 +314,8 @@ def rank_movies(want, movies, year=None):
     whether a whole word is common to both titles - character similarity alone
     puts "matrix" and "master" at 0.67, close enough to misfile a disc.
     """
-    want_tokens = {w for w in want.split() if len(w) >= 3}
+    want_tokens = {w for w in want.split()
+                   if len(w) >= 3 and w not in GENERIC_TITLE_WORDS}
     # ISO9660 volume labels cannot contain spaces, so discs arrive squashed:
     # BENDITLIKEBECKHAM_4X3. Word-for-word comparison finds nothing in common
     # with "Bend It Like Beckham", so compare the space-stripped forms too and
@@ -319,7 +332,8 @@ def rank_movies(want, movies, year=None):
                 continue
             norm = normalize(c)
             score = max(score, SequenceMatcher(None, want, norm).ratio())
-            norm_words = {w for w in norm.split() if len(w) >= 3}
+            norm_words = {w for w in norm.split()
+                          if len(w) >= 3 and w not in GENERIC_TITLE_WORDS}
             if want_tokens & norm_words:
                 shares_word = True
             norm_flat = norm.replace(" ", "")
@@ -353,7 +367,8 @@ def match_movie(query=None, tmdb_id=None, iso_path=None):
     if not want:
         die(f"nothing searchable in '{query}'")
 
-    want_tokens = {w for w in want.split() if len(w) >= 3}
+    want_tokens = {w for w in want.split()
+                   if len(w) >= 3 and w not in GENERIC_TITLE_WORDS}
     scored = rank_movies(want, movies, year)
     best_score, shares_word, best = scored[0] if scored else (0.0, False, None)
 

@@ -145,6 +145,7 @@ function draw(){
   $('#rail').innerHTML = [
     `<span><span class="dot ${r.reachable?'on':'off'}"></span>Radarr ${r.reachable?`<b>${r.movies}</b> films`:'not connected'}</span>`,
     `<span><span class="dot ${c.synced?'on':'off'}"></span>Catalogue ${c.synced?`<b>${c.discs}</b> discs`:'not downloaded'}</span>`,
+    `<span><span class="dot ${(STATE.sonarr||{}).reachable?'on':'off'}"></span>Sonarr ${(STATE.sonarr||{}).reachable?`<b>${STATE.sonarr.series}</b> shows`:'not connected'}</span>`,
     `<span><span class="dot ${v.available?'on':'off'}"></span>Vision ${v.available?`<b>${esc(v.model||'')}</b>${v.loaded?' · warm':''}`:'tesseract only'}</span>`,
   ].join('');
 
@@ -186,7 +187,9 @@ const chooseMovie = i => { RV.chosen = SHOWN[i]; drawReview(); };
 const namedCount = d => (d.extras||[]).filter(t => t.source && t.source!=='placeholder').length;
 
 function drawReview(){
-  const d = RV.data, c = RV.chosen, db = d.discdb || {};
+  const d = RV.data;
+  if (d.kind === 'episodes') return drawEpisodes();
+  const c = RV.chosen, db = d.discdb || {};
   SHOWN = d.suggestion ? [d.suggestion, ...d.candidates.filter(x=>x.tmdbId!==d.suggestion.tmdbId)]
                        : d.candidates.slice();
   if (c && !SHOWN.some(m=>m.tmdbId===c.tmdbId)) SHOWN.unshift(c);
@@ -249,6 +252,113 @@ function drawReview(){
       ${c&&!db.matched?`<button class="ghost" onclick="contribute()">Contribute to TheDiscDb</button>`:''}
       <button class="ghost" onclick="closeSheet()">Cancel</button>
     </div>`);
+}
+
+// A box set is a different question: not "which film and what are the extras"
+// but "which show, which season, and which episode is each title".
+function drawEpisodes(){
+  const d = RV.data, s = RV.series || d.series;
+  SHOWN = d.candidates || [];
+  openSheet(`
+    <h3>This looks like a TV box set</h3>
+    <div class="hint"><b>${esc(d.iso.split('/').pop())}</b> — ${esc(d.reason)}.
+      ${d.playall.length?`Ignoring ${d.playall.length} play-all title${d.playall.length===1?'':'s'}.`:''}
+      ${d.discdb&&d.discdb.matched?'Episode numbers come from the catalogue.':
+        'Episode numbers are a running sequence — set the first one and the rest follow.'}</div>
+
+    ${SHOWN.map((m,i)=>`<div class="pick${s&&s.id===m.id?' sel':''}" onclick="chooseSeries(${i})">
+      ${m.poster?`<img src="${esc(m.poster)}" alt="" loading="lazy">`:'<img alt="">'}
+      <div><b>${esc(m.title)}</b><small>${(m.seasons||[]).length} seasons in Sonarr</small></div>
+    </div>`).join('') || '<div class="hint">No series matched — search below.</div>'}
+
+    <div class="row" style="border:0">
+      <input type="search" id="q" placeholder="search your shows, e.g. Buffy"
+             value="${esc(RV.search ?? d.guess ?? '')}"
+             onkeydown="if(event.key==='Enter')doSearchSeries()">
+      <button class="ghost" onclick="doSearchSeries()">Search</button>
+    </div>
+
+    ${s ? `
+      <div class="row" style="border:0;margin-top:.9rem">
+        <span style="font-size:.85rem">Season</span>
+        <select id="season" onchange="reNumber()" style="max-width:7rem">
+          ${(s.seasons||[]).filter(n=>n>0).map(n=>`<option${n===(RV.season??d.season)?' selected':''}>${n}</option>`).join('')}
+        </select>
+        <span style="font-size:.85rem;margin-left:.6rem">First episode on this disc</span>
+        <input type="text" id="firstEp" value="${esc(RV.first ?? (d.episodes[0]||{}).number ?? 1)}"
+               style="max-width:4rem" oninput="reNumber()">
+      </div>
+      <div class="hint" style="margin:.8rem 0 .2rem">
+        Titles land in <b>${esc(s.path)}/Season ${String(RV.season??d.season??1).padStart(2,'0')}/</b>.
+        Sonarr renames them to your format when it imports.</div>
+      ${d.episodes.map((e,i)=>`<label class="row">
+        <input type="checkbox" ${e.include?'checked':''} id="einc${i}">
+        <span class="dur">${esc(e.duration)}</span>
+        <span style="width:4.2rem;font-size:.8rem;color:var(--dim)">E${String(e.number).padStart(2,'0')}</span>
+        <input type="text" id="etitle${i}" value="${esc(e.title||'')}"
+               placeholder="Sonarr's episode title is used if blank">
+        ${e.source==='thediscdb'?'<span class="src db">db</span>':''}
+      </label>`).join('')}
+    ` : ''}
+
+    <div class="btns">
+      ${s?`<button onclick="importEpisodes()">Import ${d.episodes.filter(e=>e.include).length} episodes</button>`:''}
+      <button class="ghost" onclick="treatAsFilm()">It's a film, not a box set</button>
+      <button class="ghost" onclick="closeSheet()">Cancel</button>
+    </div>`);
+}
+
+const chooseSeries = i => { RV.series = SHOWN[i]; drawEpisodes(); };
+
+function reNumber(){
+  const first = parseInt((document.getElementById('firstEp')||{}).value, 10);
+  const season = parseInt((document.getElementById('season')||{}).value, 10);
+  if (!isNaN(season)) RV.season = season;
+  if (!isNaN(first)) {
+    RV.first = first;
+    RV.data.episodes.forEach((e,i)=>{ e.number = first + i; });
+  }
+  drawEpisodes();
+}
+
+async function doSearchSeries(){
+  const q=(document.getElementById('q')||{}).value||'';
+  if(q.trim().length<2) return toast('type at least two characters');
+  RV.search=q; toast('searching…');
+  let r; try{ r=await (await fetch('/api/search?q='+encodeURIComponent(q))).json(); }
+  catch{ return toast('search failed'); }
+  RV.data.candidates = r.series || [];
+  drawEpisodes();
+}
+
+function readEpisodeEdits(){
+  (RV.data.episodes||[]).forEach((e,i)=>{
+    const t=document.getElementById('etitle'+i), c=document.getElementById('einc'+i);
+    if(t) e.title=t.value; if(c) e.include=c.checked;
+  });
+}
+
+async function importEpisodes(){
+  readEpisodeEdits();
+  const d=RV.data, s=RV.series||d.series;
+  const season = RV.season ?? d.season ?? 1;
+  const r = await post('/api/import-episodes', {rel:RV.rel, seriesId:s.id, season,
+    episodes:d.episodes.map(e=>({ix:e.ix,seconds:e.seconds,chapters:e.chapters,
+      number:e.number,title:e.title,include:e.include}))});
+  if(!r) return; RV.job=r.job; pollJob();
+}
+
+// Detection is a suggestion. If it got the shape wrong, say so and the film
+// path takes over.
+function treatAsFilm(){
+  RV.data.kind='movie'; RV.data.extras=RV.data.extras||RV.data.episodes.map(e=>({
+    ix:e.ix,duration:e.duration,seconds:e.seconds,chapters:e.chapters,
+    include:true,name:'Featurette',subdir:'Featurettes',source:'placeholder'}));
+  RV.data.feature=RV.data.feature||{ix:RV.data.episodes[0].ix,
+    duration:RV.data.episodes[0].duration,seconds:RV.data.episodes[0].seconds,chapters:0};
+  RV.data.suggestion=null; RV.data.candidates=[]; RV.chosen=null;
+  toast('treating it as a film — pick the title');
+  drawReview();
 }
 
 function readEdits(){

@@ -198,12 +198,21 @@ def build_index(repo_dir=REPO_DIR, index_path=INDEX_PATH, dvd_only=True):
             name = (item.get("Title") or "").strip()
             if not name:
                 continue                    # unnamed title tells us nothing
-            titles.append({
+            row = {
                 "src": str(t.get("SourceFile") or ""),
                 "s": parse_duration(t.get("Duration")),
                 "n": name,
                 "t": item.get("Type") or "Extra",
-            })
+            }
+            # Box sets carry the numbers outright, which is the whole answer to
+            # "which episode is title 7" — no ordering heuristic needed.
+            if row["t"] == "Episode":
+                for key, short in (("Season", "se"), ("Episode", "ep")):
+                    try:
+                        row[short] = int(str(item.get(key)).strip())
+                    except (TypeError, ValueError):
+                        pass
+            titles.append(row)
         if not titles:
             continue
 
@@ -364,6 +373,8 @@ def name_titles(entry, titles, tol=2):
             "type": cand["t"],
             "subdir": TYPE_TO_PLEX.get(cand["t"], "Featurettes"),
             "is_feature": cand["t"] == "MainMovie",
+            "season": cand.get("se"),
+            "episode": cand.get("ep"),
         }
     return out
 

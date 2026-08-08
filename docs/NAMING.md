@@ -169,3 +169,38 @@ items, and a label with no button has no title to play however perfect the name.
 
 **The model supplies names; the disc's structure vetoes them.** Neither half is
 safe alone.
+
+---
+
+## Television box sets
+
+A film disc has one title far longer than the rest. An episode disc does not:
+it has several of much the same length, and often a "play all" chain longer
+than any of them. Run the film classifier over that and it calls the play-all
+chain the feature and the episodes extras — wrong in every particular.
+
+Detection therefore looks at the **shape** of the runtimes rather than the
+longest one: a cluster of similar-length titles between 15 and 70 minutes, with
+the longest title either inside that cluster or roughly the sum of it. A
+play-all chain is evidence *for* a box set, never against it.
+
+Measured over every DVD in TheDiscDb with a disc listing — 258 episode discs and
+115 film discs — that finds **229 of 258 box sets while correctly rejecting 110
+of 115 films**. Two episodes is enough to call it: a season opener that runs
+feature-length leaves only two ordinary episodes beside it, which is a common
+shape rather than a rare one, and requiring three missed fourteen real box sets.
+
+Detection is a suggestion. The review screen says why it decided what it did and
+offers *"It's a film, not a box set"* if it got the shape wrong.
+
+### Which episode is which
+
+A catalogue hit answers outright: TheDiscDb records a season and episode number
+per title. Without one, discs run in order, and the only unknown is where this
+disc starts in the season — one number a human supplies, rather than a mapping
+they have to build.
+
+Episode titles come from **Sonarr**, not from the disc. Sonarr's title is the
+one the library already uses, so the file matches its siblings. Files are named
+`Show - S02E01 - Title.mkv` in `Season 02/`, which Sonarr's scanner parses and
+then renames to whatever format you have configured.
