@@ -689,9 +689,12 @@ def discdb_status():
         return {"available": False}
     index = discdb.load_index()
     if not index:
-        return {"available": True, "synced": False}
+        # A sync that ran and failed must not look like one never attempted.
+        return {"available": True, "synced": False,
+                "last": last_sync_result()}
     return {"available": True, "synced": True,
-            "discs": index.get("count", 0), "built": index.get("built")}
+            "discs": index.get("count", 0), "built": index.get("built"),
+            "last": last_sync_result()}
 
 
 def start_menu_scan(iso_path):
@@ -769,24 +772,82 @@ def read_cover_photo(iso_path, image_bytes):
     return items, err
 
 
+def _sync_result_path():
+    return os.path.join(STATE_DIR, "last-sync.json")
+
+
+def _save_sync_result(data):
+    try:
+        with open(_sync_result_path(), "w") as fh:
+            json.dump(data, fh)
+    except OSError:
+        pass
+
+
+def last_sync_result():
+    """How the last sync ended, so a failure outlives the job that reported it."""
+    try:
+        with open(_sync_result_path()) as fh:
+            return json.load(fh)
+    except (OSError, ValueError):
+        return None
+
+
+def _dir_megabytes(path):
+    total = 0
+    for root, _dirs, files in os.walk(path):
+        for f in files:
+            try:
+                total += os.path.getsize(os.path.join(root, f))
+            except OSError:
+                pass
+    return total / 1e6
+
+
 def start_discdb_sync():
+    """Fetch the catalogue, reporting what it is doing while it does it.
+
+    The clone is a few hundred megabytes and takes minutes, during which git
+    says nothing this process can see. Reported as a bare spinner that is
+    indistinguishable from a hang — which is exactly how it read to the first
+    person who ran it. A watcher reports the checkout growing on disk instead,
+    so "still working" and "stopped" look different.
+    """
     job_id = "discdb-%d" % (time.time() * 1000)
-    _set(job_id, status="running", total=1, done=0,
-         current="fetching TheDiscDb", log=[])
+    _set(job_id, status="running", total=2, done=0, log=[],
+         current="fetching TheDiscDb — a few hundred MB, several minutes")
+
+    stop = threading.Event()
+
+    def watch():
+        last = -1.0
+        while not stop.wait(10):
+            try:
+                mb = _dir_megabytes(discdb.DISCDB_DIR)
+            except OSError:
+                continue
+            if mb - last >= 5:          # only speak when it actually moved
+                last = mb
+                _set(job_id, current="fetching TheDiscDb — %.0f MB so far" % mb)
 
     def run():
+        threading.Thread(target=watch, daemon=True).start()
         try:
+            _set(job_id, done=0)
             index = discdb.sync()
+            stop.set()
             _append_log(job_id, "indexed %d discs" % index.get("count", 0))
-            _set(job_id, status="done", done=1, current="",
-                 finished=time.time())
+            _set(job_id, status="done", done=2, current="", finished=time.time())
+            _save_sync_result({"ok": True, "count": index.get("count", 0),
+                               "at": time.time()})
         except Exception as e:                           # noqa: BLE001
+            stop.set()
             _append_log(job_id, "FAILED: %s" % e)
             _set(job_id, status="failed", error=str(e), finished=time.time())
+            _save_sync_result({"ok": False, "error": str(e), "at": time.time()})
 
     threading.Thread(target=run, daemon=True).start()
     return job_id
-
 
 def start_import(iso_path, tmdb_id, extras, include_feature=False,
                  feature_ix=None, feature_name=None, feature_seconds=None,

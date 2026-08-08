@@ -190,9 +190,14 @@ function draw(){
     </div>`; }).join('')
     : `<div class="card empty">No ISOs found in ${esc(STATE.iso_dir||'')}. Mount some and they appear here.</div>`;
 
+  // A sync that ran and failed has to say so here, because the job that knew
+  // about it is gone the moment the page is reloaded.
+  const failed = c.last && c.last.ok === false;
   $('#catalogue').innerHTML = `<div class="card disc">
     <span class="nm">TheDiscDb${c.synced?` — <b>${c.discs}</b> DVDs indexed`:' — not downloaded'}
-      <span class="sub">exact disc identification and real extra names</span></span>
+      ${failed?'<span class="pill bad">last attempt failed</span>':''}
+      <span class="sub">${failed?esc(c.last.error||'').slice(0,110)
+        :'exact disc identification and real extra names'}</span></span>
     <button class="ghost" onclick="syncDb()">${c.synced?'Refresh':'Download'}</button></div>`;
 }
 
@@ -495,8 +500,28 @@ async function contribute(){
     <div class="btns"><button class="ghost" onclick="closeSheet()">Close</button></div>`);
 }
 
-async function syncDb(){ const r=await post('/api/discdb-sync',{}); if(!r) return;
-  RV={job:r.job}; toast('fetching the catalogue…'); pollJob(); }
+async function syncDb(){
+  const r = await post('/api/discdb-sync', {}); if (!r) return;
+  RV = {job: r.job}; pollSync();
+}
+
+// The catalogue clone is minutes long and silent. Show what step it is on and
+// how much has landed, so a slow fetch cannot be mistaken for a dead one.
+async function pollSync(){
+  let j; try { j = await (await fetch('/api/job?id='+encodeURIComponent(RV.job))).json(); }
+  catch { j = null; }
+  if (!j) return setTimeout(pollSync, 3000);
+  const done = j.status === 'done' || j.status === 'failed';
+  openSheet(`
+    <h3>${done ? (j.status==='done' ? 'Catalogue ready' : 'Catalogue download failed')
+               : 'Downloading the catalogue'}</h3>
+    <div class="hint">${done ? '' : esc(j.current || 'starting…')}
+      ${done ? '' : '<br>This runs to a few hundred megabytes and takes several minutes. You can close this — it keeps going.'}
+      ${j.error ? esc(j.error) : ''}</div>
+    <div class="log">${(j.log||[]).map(esc).join('\n') || esc(j.current || 'starting…')}</div>
+    <div class="btns"><button class="ghost" onclick="closeSheet()">${done?'Close':'Run in background'}</button></div>`);
+  if (!done) setTimeout(pollSync, 3000); else refresh();
+}
 
 refresh(); setInterval(refresh, 4000);
 </script>
