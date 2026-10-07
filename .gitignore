@@ -2,3 +2,13 @@ __pycache__/
 *.pyc
 .env
 config/
+docker-compose.override.yml
+docker-compose.yml.bak-*
+
+# Unraid Compose Manager artifacts, not source
+name
+has_build
+autostart
+last_result.json
+started_at
+project_name
