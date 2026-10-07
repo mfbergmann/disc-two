@@ -284,6 +284,7 @@ function drawReview(){
                 onchange="coverPhoto(this)"></label>
        <button class="ghost" onclick="menuScan()">Read the disc menu</button>`:''}
       ${c&&!db.matched?`<button class="ghost" onclick="contribute()">Contribute to TheDiscDb</button>`:''}
+      ${STATE.sonarr&&STATE.sonarr.reachable?`<button class="ghost" onclick="treatAsTV()">It's TV, not a film</button>`:''}
       <button class="ghost" onclick="closeSheet()">Cancel</button>
     </div>`);
 }
@@ -294,7 +295,7 @@ function drawEpisodes(){
   const d = RV.data, s = RV.series || d.series;
   SHOWN = d.candidates || [];
   openSheet(`
-    <h3>This looks like a TV box set</h3>
+    <h3>${d.reason==='you said this disc is television'?'Which episode is this?':'This looks like a TV box set'}</h3>
     <div class="hint"><b>${esc(d.iso.split('/').pop())}</b> — ${esc(d.reason)}.
       ${d.playall.length?`Ignoring ${d.playall.length} play-all title${d.playall.length===1?'':'s'}.`:''}
       ${d.discdb&&d.discdb.matched?'Episode numbers come from the catalogue.':
@@ -328,7 +329,8 @@ function drawEpisodes(){
       ${d.episodes.map((e,i)=>`<label class="row">
         <input type="checkbox" ${e.include?'checked':''} id="einc${i}">
         <span class="dur">${esc(e.duration)}</span>
-        <span style="width:4.2rem;font-size:.8rem;color:var(--dim)">E${String(e.number).padStart(2,'0')}</span>
+        <span style="font-size:.8rem;color:var(--dim)">E</span><input type="text" id="enum${i}" value="${esc(e.number)}"
+               inputmode="numeric" style="max-width:3.6rem" title="Episode number in Sonarr">
         <input type="text" id="etitle${i}" value="${esc(e.title||'')}"
                placeholder="Sonarr's episode title is used if blank">
         ${e.source==='thediscdb'?'<span class="src db">db</span>':''}
@@ -342,13 +344,16 @@ function drawEpisodes(){
     </div>`);
 }
 
-const chooseSeries = i => { RV.series = SHOWN[i]; drawEpisodes(); };
+const chooseSeries = i => { readEpisodeEdits(); RV.series = SHOWN[i]; drawEpisodes(); };
 
 function reNumber(){
+  readEpisodeEdits();   // keep hand-typed episode numbers and titles
   const first = parseInt((document.getElementById('firstEp')||{}).value, 10);
   const season = parseInt((document.getElementById('season')||{}).value, 10);
   if (!isNaN(season)) RV.season = season;
-  if (!isNaN(first)) {
+  // Only a change to "first episode" renumbers the run; a season change must
+  // not overwrite numbers typed per row (e.g. a lone S11E612).
+  if (!isNaN(first) && first !== RV.first) {
     RV.first = first;
     RV.data.episodes.forEach((e,i)=>{ e.number = first + i; });
   }
@@ -358,7 +363,7 @@ function reNumber(){
 async function doSearchSeries(){
   const q=(document.getElementById('q')||{}).value||'';
   if(q.trim().length<2) return toast('type at least two characters');
-  RV.search=q; toast('searching…');
+  readEpisodeEdits(); RV.search=q; toast('searching…');
   let r; try{ r=await (await fetch('/api/search?q='+encodeURIComponent(q))).json(); }
   catch{ return toast('search failed'); }
   RV.data.candidates = r.series || [];
@@ -367,8 +372,10 @@ async function doSearchSeries(){
 
 function readEpisodeEdits(){
   (RV.data.episodes||[]).forEach((e,i)=>{
-    const t=document.getElementById('etitle'+i), c=document.getElementById('einc'+i);
+    const t=document.getElementById('etitle'+i), c=document.getElementById('einc'+i),
+          n=document.getElementById('enum'+i);
     if(t) e.title=t.value; if(c) e.include=c.checked;
+    if(n){ const v=parseInt(n.value,10); if(!isNaN(v)) e.number=v; }
   });
 }
 
@@ -380,6 +387,25 @@ async function importEpisodes(){
     episodes:d.episodes.map(e=>({ix:e.ix,seconds:e.seconds,chapters:e.chapters,
       number:e.number,title:e.title,include:e.include}))});
   if(!r) return; RV.job=r.job; pollJob();
+}
+
+// The reverse: a disc read as a film that is really television -- most often a
+// single episode (one ~45 min title looks exactly like a short film), or a
+// made-to-order DVD-R with no menus. The feature becomes the first episode;
+// extras long enough to be episodes are offered too, unticked.
+const EPISODE_MIN_SECS = 900;
+function treatAsTV(){
+  const d=RV.data, rows=[];
+  if(d.feature) rows.push({...d.feature, include:true});
+  (d.extras||[]).forEach(t=>{ if((t.seconds||0)>=EPISODE_MIN_SECS) rows.push({...t, include:false}); });
+  d.kind='episodes';
+  d.episodes=rows.map((t,i)=>({ix:t.ix,duration:t.duration,seconds:t.seconds,chapters:t.chapters||0,
+    number:i+1,title:'',source:'manual',include:t.include}));
+  d.reason=d.reason||'you said this disc is television';
+  d.playall=d.playall||[]; d.discdb=d.discdb||{}; d.season=d.season||null;
+  d.candidates=[]; d.series=null; RV.series=null; RV.first=1;
+  toast('treating it as TV — find the show, then set season and episode');
+  drawEpisodes();
 }
 
 // Detection is a suggestion. If it got the shape wrong, say so and the film
