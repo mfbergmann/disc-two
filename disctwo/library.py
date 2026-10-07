@@ -550,6 +550,26 @@ def _run_import(job_id, iso_path, movie, extras, include_feature, feature_ix,
 
         encoder = ei.pick_encoder()
 
+        # The film may already have a main file. Writing the disc's feature
+        # beside it would leave two features in one folder, and Radarr tracks
+        # only one of them. A copy Deep Cut fetched from the web (release group
+        # "DeepCut") is a stand-in the disc should replace; anything else is a
+        # real release and is left alone.
+        replace_file = None
+        if include_feature and movie.get("id"):
+            current = ei.radarr_get("movie/%d" % movie["id"]) or {}
+            mf = current.get("movieFile") if current.get("hasFile") else None
+            if mf:
+                name = mf.get("relativePath") or ""
+                if mf.get("releaseGroup") == "DeepCut" or "-DeepCut" in name:
+                    replace_file = mf
+                    _append_log(job_id, "will replace the Deep Cut web copy (%s) once the disc feature is encoded" % name)
+                else:
+                    include_feature = False
+                    _append_log(job_id, "feature not encoded: Radarr already has %s (%s). "
+                                "Delete that file in Radarr first if you want the disc copy."
+                                % ((mf.get("quality") or {}).get("quality", {}).get("name", "a file"), name))
+
         work = []
         if include_feature:
             # The feature belongs beside the extras folder, not inside it.
@@ -574,6 +594,7 @@ def _run_import(job_id, iso_path, movie, extras, include_feature, feature_ix,
              encoder=encoder, movie=movie, log=[])
 
         ok = failed = 0
+        feature_ok = False
         for n, (ix, dest, is_feature, seconds) in enumerate(work, 1):
             label = os.path.basename(dest)
             _set(job_id, current=label, done=n - 1)
@@ -584,6 +605,7 @@ def _run_import(job_id, iso_path, movie, extras, include_feature, feature_ix,
                                          expect_seconds=seconds)
             if good:
                 ok += 1
+                feature_ok = feature_ok or is_feature
                 _append_log(job_id, "imported: %s%s"
                             % (label, "  (%s)" % note if note else ""))
             else:
@@ -591,6 +613,14 @@ def _run_import(job_id, iso_path, movie, extras, include_feature, feature_ix,
                 _append_log(job_id, "FAILED: %s — %s" % (label, (note or "")[:200]))
 
         _set(job_id, done=len(work), current="")
+
+        # Only now -- with the disc's feature safely on disk -- remove the web
+        # copy it replaces, through Radarr so its records stay right.
+        if replace_file and feature_ok:
+            if ei.radarr_delete("moviefile/%d" % replace_file["id"]):
+                _append_log(job_id, "removed the Deep Cut web copy: %s" % replace_file.get("relativePath"))
+            else:
+                _append_log(job_id, "could not remove the Deep Cut web copy; delete it in Radarr")
 
         if ok:
             ei.notify_plex(movie_path)

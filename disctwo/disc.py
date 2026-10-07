@@ -236,6 +236,21 @@ def radarr_get(path):
         die(f"Radarr unreachable at {RADARR_URL}: {e}")
 
 
+def radarr_delete(path):
+    req = urllib.request.Request(
+        f"{RADARR_URL}/api/v3/{path}",
+        headers={"X-Api-Key": RADARR_API_KEY},
+        method="DELETE",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            resp.read()
+        return True
+    except urllib.error.URLError as e:
+        log(f"  ! Radarr delete failed: {e}")
+        return False
+
+
 def radarr_post(path, payload):
     req = urllib.request.Request(
         f"{RADARR_URL}/api/v3/{path}",
