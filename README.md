@@ -68,6 +68,20 @@ wrong film, so a match needs a high score *and* a distinctive word in common.
 If the film isn't in your library, Disc Two adds it to Radarr first so Radarr
 computes the folder name, then encodes the main title in alongside the extras.
 
+## When the film already has a file
+
+Importing a disc's main feature into a film that Radarr already has a file
+for would leave two features in one folder. So Disc Two checks first:
+
+- If the existing file came from [Deep Cut](https://github.com/mfbergmann/deep-cut)
+  (a last-resort web fetcher; release group `DeepCut`), the disc replaces it:
+  the feature is encoded first, and only then is the web copy removed through
+  Radarr.
+- Any other existing file is a real release. The feature is skipped and the
+  job log says so; delete that file in Radarr first if you want the disc copy.
+
+Extras are unaffected either way.
+
 ## Quick start
 
 ```bash
