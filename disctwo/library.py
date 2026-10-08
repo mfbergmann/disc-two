@@ -285,7 +285,7 @@ def start_episode_import(iso_path, series_id, season, episodes, first_episode=1)
             if ok:
                 tv.rescan(series_id)
                 _append_log(job_id, "asked Sonarr to rescan")
-                notify_plex(series["path"])
+                ei.notify_plex(series["path"])
             _set(job_id, status="failed" if failed and not ok else "done",
                  ok=ok, failed=failed, finished=time.time())
             review = load_review(iso_path)
